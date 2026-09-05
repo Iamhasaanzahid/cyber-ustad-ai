@@ -1,4 +1,4 @@
-""""
+"""
 groq_client.py
 -----------------
 Ye module Groq API ke sath ultra-fast streaming handle karta hai.
@@ -6,8 +6,8 @@ Ye module Groq API ke sath ultra-fast streaming handle karta hai.
 
 from openai import OpenAI
 
-# Yahan model name change kar diya hai taake 'model_not_found' error khatam ho jaye
-DEFAULT_MODEL = "llama-3.1-8b-instant"
+# Yahan naya active model set kar diya hai
+DEFAULT_MODEL = "openai/gpt-oss-20b"
 
 def create_groq_client(api_key: str):
     return OpenAI(
