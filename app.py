@@ -3,6 +3,14 @@ CyberUstad AI
 =============
 Ek funny, roasting wala Cyber Security ustad jo Streamlit chat
 interface ke zariye Red Team + Blue Team A-to-Z sikhata hai.
+
+Run karne ka tareeqa:
+    streamlit run app.py
+
+API key do tareeqon se de sakte ho:
+    1. Sidebar mein directly paste kar do (sirf is session ke liye)
+    2. .streamlit/secrets.toml mein GEMINI_API_KEY set kar do
+        (permanent, GitHub pe push mat karna is file ko!)
 """
 
 import streamlit as st
@@ -28,9 +36,11 @@ st.set_page_config(
 # Session state defaults
 # ---------------------------------------------------------------------
 if "messages" not in st.session_state:
+    # Ye display ke liye hai - [{"role": "user"/"assistant", "content": str}]
     st.session_state.messages = []
 
 if "gemini_history" not in st.session_state:
+    # Ye Gemini API ke format mein hai - [{"role": "user"/"model", "parts": [str]}]
     st.session_state.gemini_history = []
 
 if "chat_session" not in st.session_state:
@@ -46,19 +56,12 @@ if "configured" not in st.session_state:
 with st.sidebar:
     st.title("⚙️ CyberUstad Settings")
 
-    # Optional direct inputs for keys in sidebar
+    # API Key input in sidebar (supports direct session pasting)
     api_key_input = st.text_input(
-        "🔑 Gemini API Key (Optional)",
+        "🔑 Gemini API Key",
         type="password",
         placeholder="AIzaSy...",
-        help="Agar secrets.toml use nahi karna toh yahan paste kar do."
-    )
-
-    deepseek_key_input = st.text_input(
-        "🔑 DeepSeek API Key (Fallback)",
-        type="password",
-        placeholder="sk-...",
-        help="Gemini quota khatam hone par DeepSeek ke liye key."
+        help="Yahan apni API key paste kar do agar secrets.toml use nahi karna."
     )
 
     st.divider()
@@ -72,7 +75,7 @@ with st.sidebar:
         min_value=1,
         max_value=3,
         value=2,
-        help="1 = Halka mazaak, 3 = Full Ustad Mode",
+        help="1 = Halka mazaak, 3 = Full Ustad Mode (khoob tang karega)",
     )
 
     st.divider()
@@ -87,7 +90,9 @@ with st.sidebar:
 
     st.divider()
     st.caption(
-        "Made with 😂 + ☕. Educational purposes only."
+        "Made with 😂 + ☕. Ye tool sirf educational purposes ke liye "
+        "hai - authorized cybersecurity learning aur legal bug bounty "
+        "practice ke liye."
     )
 
 
@@ -97,25 +102,25 @@ with st.sidebar:
 st.title("🕵️‍♂️ CyberUstad AI")
 st.caption("Red Team + Blue Team sikho... hasi hasi mein, roast khaate hue 😎🔥")
 
-# API keys resolution (Sidebar takes priority, falls back to Streamlit secrets)
-api_key = api_key_input.strip() if api_key_input else None
-if not api_key:
+# API key resolution: Sidebar input takes priority, falls back to Streamlit secrets
+api_key = None
+if api_key_input and api_key_input.strip():
+    api_key = api_key_input.strip()
+else:
     try:
         api_key = st.secrets["GEMINI_API_KEY"]
-    except Exception:
-        pass
-
-deepseek_api_key = deepseek_key_input.strip() if deepseek_key_input else None
-if not deepseek_api_key:
-    try:
-        deepseek_api_key = st.secrets["DEEPSEEK_API_KEY"]
     except Exception:
         pass
 
 if not api_key:
     st.error(
         "⚠️ **GEMINI_API_KEY set nahi hai!**\n\n"
-        "Apni Gemini API key sidebar mein paste karo ya Streamlit secrets mein add karo."
+        "Aap ya toh **sidebar mein apni API key paste kar do**, ya phir:\n\n"
+        "Streamlit Cloud par: App ke 'Manage app' -> **Settings -> Secrets** "
+        "mein jaake ye add karo:\n\n"
+        "```toml\nGEMINI_API_KEY = \"your-key-here\"\n```\n\n"
+        "Local par chalate ho to `.streamlit/secrets.toml` file mein daalo "
+        "(dekho `.streamlit/secrets.toml.example`)."
     )
     st.stop()
 
@@ -123,12 +128,12 @@ if not api_key:
 # ---------------------------------------------------------------------
 # Configure Gemini + (re)build chat session when settings change
 # ---------------------------------------------------------------------
+system_prompt = build_system_prompt(difficulty, roast_level, focus)
 settings_signature = (api_key, difficulty, focus, roast_level)
 
 if st.session_state.get("settings_signature") != settings_signature:
     try:
         configure_gemini(api_key)
-        system_prompt = build_system_prompt(difficulty, roast_level, focus)
         st.session_state.chat_session = create_chat_session(
             system_prompt=system_prompt,
             history=st.session_state.gemini_history,
@@ -170,25 +175,21 @@ if user_input:
         st.markdown(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # 2. Gemini se streaming reply lo (DeepSeek fallback ke sath)
+    # 2. Gemini se streaming reply lo
     if st.session_state.chat_session is None:
-        st.error("Connection atak gaya tha — session reset ho gaya hai, dobara sawal bhejo.")
+        st.error("Connection thori si atak gayi thi — session ko reset kar diya hai, ek dafa phir se apna sawal bhej do.")
         st.session_state.settings_signature = None
         st.rerun()
 
     with st.chat_message("assistant", avatar="🕵️‍♂️"):
         full_reply = st.write_stream(
-            stream_reply(
-                chat_session=st.session_state.chat_session,
-                user_message=user_input,
-                deepseek_api_key=deepseek_api_key,
-                system_prompt=system_prompt,
-                history=st.session_state.gemini_history
-            )
+            stream_reply(st.session_state.chat_session, user_input)
         )
 
     st.session_state.messages.append({"role": "assistant", "content": full_reply})
 
-    # 3. History sync kar do
+    # 3. Gemini history sync kar do (chat_session khud maintain karta hai,
+    #    hum apna copy bhi rakhte hain taake session settings change hone
+    #    par naya session banate waqt history restore ho sake)
     st.session_state.gemini_history.append({"role": "user", "parts": [user_input]})
     st.session_state.gemini_history.append({"role": "model", "parts": [full_reply]})
