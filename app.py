@@ -1,42 +1,38 @@
-"""
+""""
 CyberUstad AI
 =============
 Ek funny, roasting wala Cyber Security ustad jo Streamlit chat
 interface ke zariye Red Team + Blue Team A-to-Z sikhata hai.
+
+Run karne ka tareeqa:
+    streamlit run app.py
+
+Setup zaroori hai (README.md mein detail se hai):
+    - GEMINI_API_KEY (secrets)
+    - Google Login (secrets [auth] section) - taake log apni chats
+      apne Google account se save kar sakein
+    - (optional) SUPABASE_URL / SUPABASE_KEY - permanent storage
 """
 
-import uuid
 from datetime import datetime
+
 import streamlit as st
-import google.generativeai as genai
 
-# ---------------------------------------------------------------------
-# Constants & Persona Settings
-# ---------------------------------------------------------------------
-DEFAULT_MODEL = "gemini-1.5-flash"
-
-DIFFICULTY_LEVELS = [
-    "Beginner (Noob - Zero Knowledge)",
-    "Intermediate (Script Kiddie - Thora Bohot Pata Hai)",
-    "Advanced (Hacker - Pro Level)"
-]
-
-WELCOME_MESSAGE = (
-    "Salam dost! Main hoon **CyberUstad**. Red Team ho ya Blue Team, "
-    "sab seekha dunga — par pehle achhi tarah roast khaane ke liye tayyar ho jao! 😎🔥\n\n"
-    "Batao, aaj kya seekhna hai? Koi bug bounty ka sawal ya SOC log analysis?"
+from core.gemini_client import (
+    DEFAULT_MODEL,
+    configure_gemini,
+    create_chat_session,
+    stream_reply,
 )
-
-def build_system_prompt(difficulty: str, roast_level: int, focus: str) -> str:
-    return f"""You are CyberUstad AI, an expert, witty, and humorous cybersecurity mentor who teaches Red Team and Blue Team operations. 
-Your tone mixes Roman Urdu and English with heavy roasting, desi humor, and deep technical accuracy.
-Current Settings:
-- Difficulty Level: {difficulty}
-- Roast Intensity: {roast_level} (Scale 1 to 3, where 3 is full Ustad mode with maximum roasting)
-- Focus Area: {focus}
-
-Always guide the user step-by-step, explain exploits or defense mechanisms clearly, maintain a roasting persona, and emphasize legal, ethical, and authorized security practices.
-"""
+from core.persona import DIFFICULTY_LEVELS, WELCOME_MESSAGE, build_system_prompt
+from core.storage import (
+    delete_conversation,
+    list_conversations,
+    load_conversation,
+    make_title,
+    new_conversation_id,
+    save_conversation,
+)
 
 # ---------------------------------------------------------------------
 # Page config
@@ -51,7 +47,8 @@ st.title("🕵️‍♂️ CyberUstad AI")
 st.caption("Red Team + Blue Team sikho... hasi hasi mein, roast khaate hue 😎🔥")
 
 # ---------------------------------------------------------------------
-# LOGIN GATE
+# LOGIN GATE - Google se login karo (chats save hongi) ya Guest mode
+# (chats save nahi hongi, sirf abhi ke liye).
 # ---------------------------------------------------------------------
 is_logged_in = getattr(st.user, "is_logged_in", False)
 
@@ -72,73 +69,52 @@ if not is_logged_in and not st.session_state.get("guest_mode"):
             st.rerun()
     st.stop()
 
-user_id = st.user.email if is_logged_in else None
-user_display = getattr(st.user, "name", None) or st.user.email if is_logged_in else "Guest"
+if is_logged_in:
+    user_id = st.user.email
+    user_display = getattr(st.user, "name", None) or st.user.email
+else:
+    user_id = None  # Guest - koi persistent identity nahi
+    user_display = "Guest"
 
-# ---------------------------------------------------------------------
-# Storage Helpers (In-Session / Dictionary Based)
-# ---------------------------------------------------------------------
-def new_conversation_id() -> str:
-    return str(uuid.uuid4())
-
-def make_title(first_message: str) -> str:
-    clean = first_message.strip().replace("\n", " ")
-    return clean[:30] + ("..." if len(clean) > 30 else "")
-
-def list_conversations(uid: str):
-    if "db_conversations" not in st.session_state:
-        st.session_state.db_conversations = {}
-    if uid not in st.session_state.db_conversations:
-        st.session_state.db_conversations[uid] = {}
-    return [{"id": cid, "title": data.get("title", "Chat")} for cid, data in st.session_state.db_conversations[uid].items()]
-
-def load_conversation(uid: str, cid: str):
-    if "db_conversations" in st.session_state and uid in st.session_state.db_conversations:
-        return st.session_state.db_conversations[uid].get(cid, {})
-    return {}
-
-def save_conversation(uid: str, cid: str, title: str, messages):
-    if "db_conversations" not in st.session_state:
-        st.session_state.db_conversations = {}
-    if uid not in st.session_state.db_conversations:
-        st.session_state.db_conversations[uid] = {}
-    st.session_state.db_conversations[uid][cid] = {
-        "title": title,
-        "messages": messages,
-    }
-
-def delete_conversation(uid: str, cid: str):
-    if "db_conversations" in st.session_state and uid in st.session_state.db_conversations:
-        if cid in st.session_state.db_conversations[uid]:
-            del st.session_state.db_conversations[uid][cid]
 
 # ---------------------------------------------------------------------
 # Session state defaults
 # ---------------------------------------------------------------------
 if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = new_conversation_id()
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+if "gemini_history" not in st.session_state:
+    st.session_state.gemini_history = []
+
 if "chat_session" not in st.session_state:
     st.session_state.chat_session = None
+
 if "settings_signature" not in st.session_state:
     st.session_state.settings_signature = None
+
 
 def start_new_chat() -> None:
     st.session_state.conversation_id = new_conversation_id()
     st.session_state.messages = []
+    st.session_state.gemini_history = []
     st.session_state.chat_session = None
     st.session_state.settings_signature = None
 
-def load_chat(cid: str) -> None:
-    conv = load_conversation(user_id, cid)
-    st.session_state.conversation_id = cid
+
+def load_chat(conversation_id: str) -> None:
+    conv = load_conversation(user_id, conversation_id)
+    st.session_state.conversation_id = conversation_id
     st.session_state.messages = conv.get("messages", [])
+    st.session_state.gemini_history = conv.get("gemini_history", [])
     st.session_state.chat_session = None
     st.session_state.settings_signature = None
+
 
 # ---------------------------------------------------------------------
-# Sidebar
+# Sidebar - account, settings, saved chats
 # ---------------------------------------------------------------------
 with st.sidebar:
     st.title("🕵️‍♂️ CyberUstad")
@@ -194,47 +170,83 @@ with st.sidebar:
     else:
         st.caption("💬 Guest mode mein purani chats save/dikhai nahi hoti.")
 
+    st.divider()
+    st.caption(
+        "Made with 😂 + ☕. Ye tool sirf educational purposes ke liye "
+        "hai — authorized cybersecurity learning aur legal bug bounty "
+        "practice ke liye."
+    )
+
+
 # ---------------------------------------------------------------------
-# API Key Check
+# API key SIRF Streamlit secrets se aayegi.
 # ---------------------------------------------------------------------
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except Exception:
-    st.error("⚠️ **GEMINI_API_KEY set nahi hai!** Secrets mein add karo.")
+    st.error(
+        "⚠️ **GEMINI_API_KEY set nahi hai!**\n\n"
+        "Streamlit Cloud par: App ke 'Manage app' -> **Settings -> Secrets** "
+        "mein jaake ye add karo:\n\n"
+        "```toml\nGEMINI_API_KEY = \"your-key-here\"\n```"
+    )
     st.stop()
 
+
 # ---------------------------------------------------------------------
-# Configure Gemini Session & Rebuild history if needed
+# Configure Gemini + (re)build chat session when needed
 # ---------------------------------------------------------------------
 settings_signature = (api_key, difficulty, focus, roast_level, st.session_state.conversation_id)
 
-if st.session_state.settings_signature != settings_signature or st.session_state.chat_session is None:
+if st.session_state.settings_signature != settings_signature:
     try:
-        genai.configure(api_key=api_key)
+        configure_gemini(api_key)
         system_prompt = build_system_prompt(difficulty, roast_level, focus)
-        model = genai.GenerativeModel(model_name=DEFAULT_MODEL, system_instruction=system_prompt)
-        
-        # Rebuild native chat session history from st.session_state.messages
-        gemini_history = []
-        for msg in st.session_state.messages:
-            role = "user" if msg["role"] == "user" else "model"
-            gemini_history.append({"role": role, "parts": [msg["content"]]})
-            
-        st.session_state.chat_session = model.start_chat(history=gemini_history)
+        st.session_state.chat_session = create_chat_session(
+            system_prompt=system_prompt,
+            history=st.session_state.gemini_history,
+            model_name=DEFAULT_MODEL,
+        )
         st.session_state.settings_signature = settings_signature
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         st.error(f"API key ya model configure karne mein masla: {exc}")
         st.stop()
 
+
+# ---------------------------------------------------------------------
+# Show welcome message once (only for brand-new, empty chats)
+# ---------------------------------------------------------------------
 if not st.session_state.messages:
     with st.chat_message("assistant", avatar="🕵️‍♂️"):
         st.markdown(WELCOME_MESSAGE)
 
+
+# ---------------------------------------------------------------------
+# Render chat history
+# ---------------------------------------------------------------------
 for msg in st.session_state.messages:
     avatar = "🕵️‍♂️" if msg["role"] == "assistant" else "🧑‍💻"
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
 
+if st.session_state.messages:
+    transcript_lines = []
+    for msg in st.session_state.messages:
+        speaker = "CyberUstad" if msg["role"] == "assistant" else "Tum"
+        transcript_lines.append(f"{speaker}: {msg['content']}\n")
+    transcript = "\n".join(transcript_lines)
+    st.download_button(
+        "⬇️ Ye Chat Export Karo (.txt)",
+        data=transcript,
+        file_name=f"cyberustad-chat-{datetime.now().strftime('%Y%m%d-%H%M')}.txt",
+        mime="text/plain",
+        use_container_width=False,
+    )
+
+
+# ---------------------------------------------------------------------
+# Chat input
+# ---------------------------------------------------------------------
 user_input = st.chat_input("Apna sawal likho... (e.g. 'SQLi kya hoti hai?')")
 
 if user_input:
@@ -242,17 +254,29 @@ if user_input:
         st.markdown(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
+    if st.session_state.chat_session is None:
+        st.error("Connection thori si atak gayi thi — dobara apna sawal bhej do.")
+        st.session_state.settings_signature = None
+        st.stop()
+
     with st.chat_message("assistant", avatar="🕵️‍♂️"):
-        response = st.session_state.chat_session.send_message(user_input, stream=True)
-        def generate():
-            for chunk in response:
-                if chunk.text:
-                    yield chunk.text
-        full_reply = st.write_stream(generate())
+        full_reply = st.write_stream(
+            stream_reply(st.session_state.chat_session, user_input)
+        )
 
     st.session_state.messages.append({"role": "assistant", "content": full_reply})
+    st.session_state.gemini_history.append({"role": "user", "parts": [user_input]})
+    st.session_state.gemini_history.append({"role": "model", "parts": [full_reply]})
 
+    # Sirf logged-in user ki chat save hoti hai. Guest mode mein
+    # jaan boojh kar save nahi karte (jaisa user ne mangwaya).
     if is_logged_in:
         title = make_title(st.session_state.messages[0]["content"])
-        save_conversation(user_id, st.session_state.conversation_id, title, st.session_state.messages)
+        save_conversation(
+            user_id,
+            st.session_state.conversation_id,
+            title,
+            st.session_state.messages,
+            st.session_state.gemini_history,
+        )
     st.rerun()
