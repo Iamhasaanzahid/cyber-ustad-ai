@@ -1,18 +1,28 @@
 """
 storage.py
 ----------
-Chat history save/load karta hai, HAR USER KI ALAG SE (jo Google se
-login karta hai uski chats sirf usko dikhti hain).
+Guest sessions aur chat history ko save/load karne ke liye.
+"""
+import json
+import os
 
-DO TAREEQAY (automatic switch):
+STORAGE_FILE = "guest_chats.json"
 
-1. AGAR Streamlit Secrets mein SUPABASE_URL aur SUPABASE_KEY set
-   hain -> Supabase (asli, PERMANENT database) use hoga.
-2. AGAR wo secrets nahi mile -> local JSON file use hoga (sirf
-   local machine ke liye theek, Streamlit Cloud redeploy se reset
-   ho jata hai).
+def load_chats():
+    if not os.path.exists(STORAGE_FILE):
+        return {}
+    try:
+        with open(STORAGE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
-Guest mode (bina login) mein history save NAHI hoti - sirf current
+def save_chats(chats_data):
+    try:
+        with open(STORAGE_FILE, "w", encoding="utf-8") as f:
+            json.dump(chats_data, f, ensure_ascii=False, indent=4)
+    except Exception as exc:
+        print(f"Error saving chats: {exc}")
 session ke liye chat chalti hai. Login karne walon ki history
 unke Google account (email) se linked hoti hai.
 """
