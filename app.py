@@ -1,8 +1,7 @@
 """
 CyberUstad AI (Groq Powered)
 ============================
-Ek funny, roasting wala Cyber Security ustad jo Streamlit chat
-interface ke zariye Red Team + Blue Team A-to-Z sikhata hai (Groq Edition).
+Lightning fast, roasting Cyber Security ustad running on Groq!
 """
 
 import streamlit as st
@@ -40,10 +39,10 @@ with st.sidebar:
     st.title("⚙️ CyberUstad Settings")
 
     api_key_input = st.text_input(
-        "🔑 Groq API Key",
+        "🔑 Groq API Key (Optional)",
         type="password",
         placeholder="gsk_...",
-        help="Yahan apni Groq API key paste karein ya secrets.toml use karein."
+        help="Optional hai - Behtar speed aur performance ke liye console.groq.com se free key daal sakte hain."
     )
 
     st.divider()
@@ -72,11 +71,11 @@ with st.sidebar:
 # Main header
 # ---------------------------------------------------------------------
 st.title("🕵️‍♂️ CyberUstad AI")
-st.caption("Red Team + Blue Team sikho... lightning fast speed ke sath 😎🔥")
+st.caption("Red Team + Blue Team sikho... mazaak, roast aur dosti ke sath 😎🔥")
 
 
 # ---------------------------------------------------------------------
-# API Key Resolution
+# API Key Resolution (Groq)
 # ---------------------------------------------------------------------
 active_api_key = None
 
@@ -93,9 +92,7 @@ if not active_api_key:
 if not active_api_key:
     st.error(
         "⚠️ **GROQ_API_KEY nahi mili!**\n\n"
-        "Baraye meharbani console.groq.com se free key lekar sidebar mein paste karein "
-        "ya Streamlit secrets (`secrets.toml`) mein set karein:\n\n"
-        "```toml\nGROQ_API_KEY = \"gsk_your_key_here\"\n```"
+        "Baraye meharbani sidebar mein apni Groq API key paste karein ya Streamlit secrets mein set karein."
     )
     st.stop()
 
