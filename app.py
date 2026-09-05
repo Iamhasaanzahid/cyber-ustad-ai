@@ -75,6 +75,7 @@ with st.sidebar:
         st.session_state.gemini_history = []
         st.session_state.chat_session = None
         st.session_state.configured = False
+        st.session_state.settings_signature = None
         st.rerun()
 
     st.divider()
@@ -158,6 +159,11 @@ if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
 
     # 2. Gemini se streaming reply lo
+    if st.session_state.chat_session is None:
+        st.error("Connection thori si atak gayi thi — session ko reset kar diya hai, ek dafa phir se apna sawal bhej do.")
+        st.session_state.settings_signature = None
+        st.rerun()
+
     with st.chat_message("assistant", avatar="🕵️‍♂️"):
         full_reply = st.write_stream(
             stream_reply(st.session_state.chat_session, user_input)
