@@ -16,7 +16,6 @@ API key do tareeqon se de sakte ho:
 import streamlit as st
 
 from core.gemini_client import (
-    AVAILABLE_MODELS,
     DEFAULT_MODEL,
     configure_gemini,
     create_chat_session,
@@ -56,8 +55,6 @@ if "configured" not in st.session_state:
 # ---------------------------------------------------------------------
 with st.sidebar:
     st.title("⚙️ CyberUstad Settings")
-
-    model_choice = st.selectbox("🤖 Model", AVAILABLE_MODELS, index=AVAILABLE_MODELS.index(DEFAULT_MODEL))
 
     difficulty = st.selectbox("📚 Tumhara Level", DIFFICULTY_LEVELS, index=0)
 
@@ -113,7 +110,7 @@ except Exception:
 # ---------------------------------------------------------------------
 # Configure Gemini + (re)build chat session when settings change
 # ---------------------------------------------------------------------
-settings_signature = (api_key, model_choice, difficulty, focus, roast_level)
+settings_signature = (api_key, difficulty, focus, roast_level)
 
 if st.session_state.get("settings_signature") != settings_signature:
     try:
@@ -122,7 +119,7 @@ if st.session_state.get("settings_signature") != settings_signature:
         st.session_state.chat_session = create_chat_session(
             system_prompt=system_prompt,
             history=st.session_state.gemini_history,
-            model_name=model_choice,
+            model_name=DEFAULT_MODEL,
         )
         st.session_state.settings_signature = settings_signature
         st.session_state.configured = True
