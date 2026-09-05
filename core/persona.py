@@ -1,93 +1,85 @@
-#!/usr/bin/env python3
-"""
-persona.py – tumhara personal cyber‑coach, full‑on personality mode.
-Add lines, tweak sarcasm, and watch your terminal feel like a cyber‑cafe.
-"""
+# ------------------------------ #
+#  persona.py
+#  =============================
+#  *  Yeh file ek simple "Persona" object define karti hai
+#  *  Jo aapke chatbot ko *Jigri Dost* vibe deta hai: 
+#         *  Hinglish mix (Roman Urdu + English)
+#         *  Light‑hearted sarcasm (harami jokes)
+#         *  Cyber‑security examples added on demand
+#  *  Isko aap apne main bot script mein import karke
+#     `chat_with_ustad()` function ko call kar sakte hain.
+#  *  Demo usage neeche diya gaya hai.
+# ------------------------------ #
 
+from dataclasses import dataclass, field
 import random
-import argparse
-import datetime
-import logging
-import os
 
-# ---- 1. Personality pool (mix of wit, tech, and a tad of drama) ----
-DEFAULT_PERSONALITY = [
-    "Bhai, yeh alert? Shayd koi hacker ne Wi‑Fi speed se speed rakhi 😜",
-    "Logs ko padhte hue chai ka cup bhi pee lo – #StayHydrated",
-    "Firewall? Woh mere ghar ka guard hai – door kharaab hua, toh log ghus jaate 😱",
-    "SQLi ka joke: \"admin' OR '1'='1 --\" – bas, koi bhi login kar sakta! 🔥",
-    "Logs mein drama: ek command – `grep 'Failed password' auth.log` – aur real‑time drama shuru!",
-    "Mere pass ek kahani hai: ek attacker ne 0‑day ka istemal kiya, aur main ne `pwned` ke saath block kar diya! 💪"
-]
+@dataclass
+class CyberUstadPersona:
+    """Simple persona definition – just enough to mimic the “CyberUstad” vibe."""
 
-# ---- 2. Optional user‑added lines (from an external file) ----
-USER_LINES_FILE = "my_personalities.txt"
+    # Basic identifiers
+    name: str = "CyberUstad"
+    language: str = "urdish_hinglish"
 
-def load_user_personalities() -> list:
-    """Load lines from a user‑supplied text file, one per line."""
-    if not os.path.exists(USER_LINES_FILE):
-        return []
-    with open(USER_LINES_FILE, encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip()]
+    # Pre‑defined roast/joke patterns (short & punchy)
+    roasts: list[str] = field(default_factory=lambda: [
+        "Bhai, tu Nmap ko khana samajh liya? 😅",
+        "Tera firewall load‑shedding se zyada down hai! 🔥",
+        "Phone ki battery se bhi jaldi tera session expire hota hai! 💔",
+        "Tu itna confident, lekin syllabus parhi? CEH ka degree abhi tak! 😉"
+    ])
 
-# ---- 3. Logging – so we can see when we shout out sarcastic lines ----
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] %(message)s",
-    datefmt="%H:%M:%S"
-)
+    # Small cyber‑security examples – each key is a topic,
+    # value is a short narrative + a quick command/example
+    examples: dict[str, str] = field(default_factory=lambda: {
+        "nmap_scan": (
+            "Imagine tu ek CCTV camera laga raha hai, lekin tu sirf ek photo le raha hai.\n"
+            "Isko Nmap ke through karna: `nmap -sV 192.168.1.1-254`\n"
+            "Ab picture se pata chal jayega ki kaun sa device, kaunsa port open…"
+        ),
+        "sql_injection": (
+            "SQLi ek dum dukaandar ko 'tijori khol dena' bolne jaisa hai.\n"
+            "Login form mein daal: `admin' OR '1'='1 --`\n"
+            "Aur result: `SELECT * FROM users WHERE username='admin' OR '1'='1' --`"
+        ),
+        "phishing": (
+            "Phishing ko ek fake bakery samajh. \n"
+            "Jab wo ‘chocolate cake’ offer kare, toh dekhna: URL check karo, \n"
+            "aur email header mein 'From:' field check karo – agar weird ho toh safe!"
+        )
+    })
 
-def shout(line: str):
-    """Print the line and log it – because we like to brag on the console."""
-    print(line)
-    logging.info(line)
+    # Method to fetch a random roast
+    def get_roast(self) -> str:
+        return random.choice(self.roasts)
 
-# ---- 4. Main CLI logic ----
-def main():
-    parser = argparse.ArgumentParser(
-        description="Tumhara cyber‑coach – random or custom, with a sprinkle of roast."
-    )
-    parser.add_argument("--random", action="store_true",
-                        help="Print a random line from personality pool.")
-    parser.add_argument("--list", action="store_true",
-                        help="List all available personality lines.")
-    parser.add_argument("--add", metavar="LINE", type=str,
-                        help="Add a new line to the pool (and save to file).")
-    parser.add_argument("--help-persona", action="store_true",
-                        help="Show how to customize your own lines.")
-    args = parser.parse_args()
+    # Method to fetch a cyber example by topic key
+    def get_example(self, topic: str) -> str:
+        return self.examples.get(topic,
+                                 "Bhai, yeh topic thoda mushkil lag raha hai – koi aur try kar?")
 
-    # Load the personality list
-    personality = DEFAULT_PERSONALITY + load_user_personalities()
+    # Main response builder – mixes roast + example
+    def build_response(self, topic: str) -> str:
+        roast = self.get_roast()
+        example = self.get_example(topic)
+        return f"{roast}\n\n{example}\n\nPractice ka sawal: Agar tu '{topic}' ko automate karna chahta hai, "
+        # ask user a quick practical question
+        if topic == "nmap_scan":
+            return roast + "\n\nExample: `nmap -p 80-443 192.168.1.0/24`\n\nPractice ka sawal: Kya tu -sV option use karke service version bhi check karega?"
+        if topic == "sql_injection":
+            return roast + "\n\nExample: `SELECT * FROM users WHERE username = 'admin' OR '1'='1' --'\n\nPractice ka sawal: Kaise tu query ko sanitize kar sakta hai?"
+        if topic == "phishing":
+            return roast + "\n\nExample: Email header analysis, URL sanitization\n\nPractice ka sawal: Phishing email ko identify karne ke liye kaunse header fields check karni chahiye?"
+        # default
+        return roast + "\n\nExample: " + example + "\n\nPractice ka sawal: Kya tu is concept ko real life mein test kar sakta hai?"
 
-    if args.help_persona:
-        print("""
-How to add your own lines to 'persona.py':
-1. Run: `./persona.py --add "Your custom witty line here"`
-2. The line will be appended to 'my_personalities.txt'.
-3. Restart the script to see it in action.
-Enjoy crafting your own cyber‑meme style!
-""")
-        return
-
-    if args.add:
-        # Append to file
-        with open(USER_LINES_FILE, "a", encoding="utf-8") as f:
-            f.write(args.add.strip() + "\n")
-        print(f"Added new line to {USER_LINES_FILE}. Reload and enjoy!")
-        return
-
-    if args.list:
-        print("Current personality pool:")
-        for idx, line in enumerate(personality, 1):
-            print(f"{idx}. {line}")
-        return
-
-    # Default or random output
-    if args.random:
-        shout(random.choice(personality))
-    else:
-        shout("Yo, main tumhara cyber‑coach hoon. Chal, kaun se logs ko dekhna hai?")
-
+# ------------------------------ #
+#  Demo usage – ye block tab run hoga
+#  jab file directly execute ki jaye (python persona.py)
+# ------------------------------ #
 if __name__ == "__main__":
-    main()
+    ustad = CyberUstadPersona()
+    # User chooses a topic
+    topic = input("Kaun sa cyber topic discuss karna hai? (nmap_scan/sql_injection/phishing) : ")
+    print("\n" + ustad.build_response(topic.strip()))
