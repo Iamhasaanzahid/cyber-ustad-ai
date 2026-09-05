@@ -10,7 +10,7 @@ Run karne ka tareeqa:
 API key do tareeqon se de sakte ho:
     1. Sidebar mein directly paste kar do (sirf is session ke liye)
     2. .streamlit/secrets.toml mein GEMINI_API_KEY set kar do
-       (permanent, GitHub pe push mat karna is file ko!)
+        (permanent, GitHub pe push mat karna is file ko!)
 """
 
 import streamlit as st
@@ -56,6 +56,16 @@ if "configured" not in st.session_state:
 with st.sidebar:
     st.title("⚙️ CyberUstad Settings")
 
+    # API Key input in sidebar (supports direct session pasting)
+    api_key_input = st.text_input(
+        "🔑 Gemini API Key",
+        type="password",
+        placeholder="AIzaSy...",
+        help="Yahan apni API key paste kar do agar secrets.toml use nahi karna."
+    )
+
+    st.divider()
+
     difficulty = st.selectbox("📚 Tumhara Level", DIFFICULTY_LEVELS, index=0)
 
     focus = st.radio("🎯 Focus", ["Red Team", "Blue Team", "Both"], index=2)
@@ -92,13 +102,20 @@ with st.sidebar:
 st.title("🕵️‍♂️ CyberUstad AI")
 st.caption("Red Team + Blue Team sikho... hasi hasi mein, roast khaate hue 😎🔥")
 
-# API key SIRF Streamlit secrets se aayegi (sidebar input jaan boojh kar
-# nahi rakha - taake key kabhi bhi chat screen par ya URL mein na aaye).
-try:
-    api_key = st.secrets["GEMINI_API_KEY"]
-except Exception:
+# API key resolution: Sidebar input takes priority, falls back to Streamlit secrets
+api_key = None
+if api_key_input and api_key_input.strip():
+    api_key = api_key_input.strip()
+else:
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        pass
+
+if not api_key:
     st.error(
         "⚠️ **GEMINI_API_KEY set nahi hai!**\n\n"
+        "Aap ya toh **sidebar mein apni API key paste kar do**, ya phir:\n\n"
         "Streamlit Cloud par: App ke 'Manage app' -> **Settings -> Secrets** "
         "mein jaake ye add karo:\n\n"
         "```toml\nGEMINI_API_KEY = \"your-key-here\"\n```\n\n"
