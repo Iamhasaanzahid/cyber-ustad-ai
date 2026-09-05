@@ -14,8 +14,13 @@ Setup zaroori hai (README.md mein detail se hai):
     - (optional) SUPABASE_URL / SUPABASE_KEY - permanent storage
 """
 
-from datetime import datetime
+import os
+import sys
 
+# Ensure current directory is in path for robust module importing
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from datetime import datetime
 import streamlit as st
 
 from core.gemini_client import (
