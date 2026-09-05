@@ -97,7 +97,7 @@ def load_conversation(uid: str, cid: str):
         return st.session_state.db_conversations[uid].get(cid, {})
     return {}
 
-def save_conversation(uid: str, cid: str, title: str, messages, gemini_history):
+def save_conversation(uid: str, cid: str, title: str, messages):
     if "db_conversations" not in st.session_state:
         st.session_state.db_conversations = {}
     if uid not in st.session_state.db_conversations:
@@ -105,7 +105,6 @@ def save_conversation(uid: str, cid: str, title: str, messages, gemini_history):
     st.session_state.db_conversations[uid][cid] = {
         "title": title,
         "messages": messages,
-        "gemini_history": gemini_history
     }
 
 def delete_conversation(uid: str, cid: str):
@@ -120,8 +119,6 @@ if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = new_conversation_id()
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "gemini_history" not in st.session_state:
-    st.session_state.gemini_history = []
 if "chat_session" not in st.session_state:
     st.session_state.chat_session = None
 if "settings_signature" not in st.session_state:
@@ -130,7 +127,6 @@ if "settings_signature" not in st.session_state:
 def start_new_chat() -> None:
     st.session_state.conversation_id = new_conversation_id()
     st.session_state.messages = []
-    st.session_state.gemini_history = []
     st.session_state.chat_session = None
     st.session_state.settings_signature = None
 
@@ -138,7 +134,6 @@ def load_chat(cid: str) -> None:
     conv = load_conversation(user_id, cid)
     st.session_state.conversation_id = cid
     st.session_state.messages = conv.get("messages", [])
-    st.session_state.gemini_history = conv.get("gemini_history", [])
     st.session_state.chat_session = None
     st.session_state.settings_signature = None
 
@@ -209,16 +204,23 @@ except Exception:
     st.stop()
 
 # ---------------------------------------------------------------------
-# Configure Gemini Session
+# Configure Gemini Session & Rebuild history if needed
 # ---------------------------------------------------------------------
 settings_signature = (api_key, difficulty, focus, roast_level, st.session_state.conversation_id)
 
-if st.session_state.settings_signature != settings_signature:
+if st.session_state.settings_signature != settings_signature or st.session_state.chat_session is None:
     try:
         genai.configure(api_key=api_key)
         system_prompt = build_system_prompt(difficulty, roast_level, focus)
         model = genai.GenerativeModel(model_name=DEFAULT_MODEL, system_instruction=system_prompt)
-        st.session_state.chat_session = model.start_chat(history=st.session_state.gemini_history or [])
+        
+        # Rebuild native chat session history from st.session_state.messages
+        gemini_history = []
+        for msg in st.session_state.messages:
+            role = "user" if msg["role"] == "user" else "model"
+            gemini_history.append({"role": role, "parts": [msg["content"]]})
+            
+        st.session_state.chat_session = model.start_chat(history=gemini_history)
         st.session_state.settings_signature = settings_signature
     except Exception as exc:
         st.error(f"API key ya model configure karne mein masla: {exc}")
@@ -249,10 +251,8 @@ if user_input:
         full_reply = st.write_stream(generate())
 
     st.session_state.messages.append({"role": "assistant", "content": full_reply})
-    st.session_state.gemini_history.append({"role": "user", "parts": [user_input]})
-    st.session_state.geminst_history_append = st.session_state.gemini_history.append({"role": "model", "parts": [full_reply]})
 
     if is_logged_in:
         title = make_title(st.session_state.messages[0]["content"])
-        save_conversation(user_id, st.session_state.conversation_id, title, st.session_state.messages, st.session_state.gemini_history)
+        save_conversation(user_id, st.session_state.conversation_id, title, st.session_state.messages)
     st.rerun()
