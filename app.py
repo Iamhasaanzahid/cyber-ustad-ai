@@ -57,20 +57,6 @@ if "configured" not in st.session_state:
 with st.sidebar:
     st.title("⚙️ CyberUstad Settings")
 
-    # API key - pehle secrets.toml check karo, warna user se lo
-    default_key = ""
-    try:
-        default_key = st.secrets.get("GEMINI_API_KEY", "")
-    except Exception:
-        default_key = ""
-
-    api_key = st.text_input(
-        "🔑 Gemini API Key",
-        value=default_key,
-        type="password",
-        help="Free key milti hai: https://aistudio.google.com/app/apikey",
-    )
-
     model_choice = st.selectbox("🤖 Model", AVAILABLE_MODELS, index=AVAILABLE_MODELS.index(DEFAULT_MODEL))
 
     difficulty = st.selectbox("📚 Tumhara Level", DIFFICULTY_LEVELS, index=0)
@@ -108,11 +94,18 @@ with st.sidebar:
 st.title("🕵️‍♂️ CyberUstad AI")
 st.caption("Red Team + Blue Team sikho... hasi hasi mein, roast khaate hue 😎🔥")
 
-if not api_key:
-    st.warning(
-        "👈 Pehle sidebar mein apni **Gemini API key** daalo taake "
-        "CyberUstad se baat shuru ho sake. Free key yahan se milti hai: "
-        "https://aistudio.google.com/app/apikey"
+# API key SIRF Streamlit secrets se aayegi (sidebar input jaan boojh kar
+# nahi rakha - taake key kabhi bhi chat screen par ya URL mein na aaye).
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    st.error(
+        "⚠️ **GEMINI_API_KEY set nahi hai!**\n\n"
+        "Streamlit Cloud par: App ke 'Manage app' -> **Settings -> Secrets** "
+        "mein jaake ye add karo:\n\n"
+        "```toml\nGEMINI_API_KEY = \"your-key-here\"\n```\n\n"
+        "Local par chalate ho to `.streamlit/secrets.toml` file mein daalo "
+        "(dekho `.streamlit/secrets.toml.example`)."
     )
     st.stop()
 
