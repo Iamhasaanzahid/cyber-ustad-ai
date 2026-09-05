@@ -12,14 +12,16 @@ import google.generativeai as genai
 
 
 # Free tier mein available accha models (Sept 2026 tak jo available thay).
-# Agar Google naya model laye to yahan add kar dena.
+# "gemini-flash-latest" ek alias hai jo hamesha Google ke current best/
+# recommended Flash model ki taraf point karta hai - isliye ye future-proof
+# hai aur model deprecate hone par app break nahi hoga.
 AVAILABLE_MODELS = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-8b",
+    "gemini-flash-latest",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
 ]
 
-DEFAULT_MODEL = "gemini-2.0-flash"
+DEFAULT_MODEL = "gemini-flash-latest"
 
 
 def configure_gemini(api_key: str) -> None:
