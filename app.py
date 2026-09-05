@@ -1,17 +1,16 @@
 """
-CyberUstad AI
-=============
+CyberUstad AI (Groq Powered)
+============================
 Ek funny, roasting wala Cyber Security ustad jo Streamlit chat
-interface ke zariye Red Team + Blue Team A-to-Z sikhata hai.
+interface ke zariye Red Team + Blue Team A-to-Z sikhata hai (Groq Edition).
 """
 
 import streamlit as st
 
-from core.gemini_client import (
+from core.groq_client import (
     DEFAULT_MODEL,
-    configure_gemini,
-    create_chat_session,
-    stream_reply,
+    create_groq_client,
+    stream_groq_reply,
 )
 from core.persona import DIFFICULTY_LEVELS, WELCOME_MESSAGE, build_system_prompt
 
@@ -30,11 +29,8 @@ st.set_page_config(
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "gemini_history" not in st.session_state:
-    st.session_state.gemini_history = []
-
-if "chat_session" not in st.session_state:
-    st.session_state.chat_session = None
+if "groq_history" not in st.session_state:
+    st.session_state.groq_history = []
 
 
 # ---------------------------------------------------------------------
@@ -44,10 +40,10 @@ with st.sidebar:
     st.title("⚙️ CyberUstad Settings")
 
     api_key_input = st.text_input(
-        "🔑 Gemini API Key",
+        "🔑 Groq API Key",
         type="password",
-        placeholder="AIzaSy...",
-        help="Yahan apni API key paste karein ya secrets.toml use karein."
+        placeholder="gsk_...",
+        help="Yahan apni Groq API key paste karein ya secrets.toml use karein."
     )
 
     st.divider()
@@ -66,18 +62,17 @@ with st.sidebar:
 
     if st.button("🗑️ Naya Chat Shuru Karo", use_container_width=True):
         st.session_state.messages = []
-        st.session_state.gemini_history = []
-        st.session_state.chat_session = None
+        st.session_state.groq_history = []
         st.rerun()
 
-    st.caption("Made with 😂 + ☕. Educational purposes only.")
+    st.caption("Blazing fast AI via Groq ⚡")
 
 
 # ---------------------------------------------------------------------
 # Main header
 # ---------------------------------------------------------------------
 st.title("🕵️‍♂️ CyberUstad AI")
-st.caption("Red Team + Blue Team sikho... hasi hasi mein, roast khaate hue 😎🔥")
+st.caption("Red Team + Blue Team sikho... lightning fast speed ke sath 😎🔥")
 
 
 # ---------------------------------------------------------------------
@@ -90,37 +85,26 @@ if api_key_input and len(api_key_input.strip()) > 5:
 
 if not active_api_key:
     try:
-        if "GEMINI_API_KEY" in st.secrets:
-            active_api_key = st.secrets["GEMINI_API_KEY"]
+        if "GROQ_API_KEY" in st.secrets:
+            active_api_key = st.secrets["GROQ_API_KEY"]
     except Exception:
         pass
 
 if not active_api_key:
     st.error(
-        "⚠️ **GEMINI_API_KEY nahi mili!**\n\n"
-        "Baraye meharbani apni API key sidebar mein paste karein ya Streamlit secrets mein set karein."
+        "⚠️ **GROQ_API_KEY nahi mili!**\n\n"
+        "Baraye meharbani console.groq.com se free key lekar sidebar mein paste karein "
+        "ya Streamlit secrets (`secrets.toml`) mein set karein:\n\n"
+        "```toml\nGROQ_API_KEY = \"gsk_your_key_here\"\n```"
     )
     st.stop()
 
 
 # ---------------------------------------------------------------------
-# Configure Gemini & Session Setup
+# Initialize Groq Client & System Prompt
 # ---------------------------------------------------------------------
 system_prompt = build_system_prompt(difficulty, roast_level, focus)
-settings_signature = (active_api_key, difficulty, focus, roast_level)
-
-if st.session_state.get("settings_signature") != settings_signature or st.session_state.chat_session is None:
-    try:
-        configure_gemini(active_api_key)
-        st.session_state.chat_session = create_chat_session(
-            system_prompt=system_prompt,
-            history=st.session_state.gemini_history,
-            model_name=DEFAULT_MODEL,
-        )
-        st.session_state.settings_signature = settings_signature
-    except Exception as exc:
-        st.error(f"API key configure karne mein masla aa gaya: {exc}")
-        st.stop()
+groq_client = create_groq_client(active_api_key)
 
 
 # ---------------------------------------------------------------------
@@ -142,7 +126,7 @@ for msg in st.session_state.messages:
 
 
 # ---------------------------------------------------------------------
-# Chat Input & Auto-Recovery Logic
+# Chat Input & Streaming Reply
 # ---------------------------------------------------------------------
 user_input = st.chat_input("Apna sawal likho... (Enter dabayein)")
 
@@ -152,36 +136,19 @@ if user_input:
         st.markdown(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # 2. Ensure session exists
-    if st.session_state.chat_session is None:
-        try:
-            configure_gemini(active_api_key)
-            st.session_state.chat_session = create_chat_session(
-                system_prompt=system_prompt,
-                history=st.session_state.gemini_history,
-                model_name=DEFAULT_MODEL,
-            )
-        except Exception:
-            pass
-
-    # 3. Stream reply with automatic fallback/recovery
+    # 2. Stream reply from Groq
     with st.chat_message("assistant", avatar="🕵️‍♂️"):
-        try:
-            full_reply = st.write_stream(
-                stream_reply(st.session_state.chat_session, user_input)
-            )
-        except Exception:
-            configure_gemini(active_api_key)
-            st.session_state.chat_session = create_chat_session(
+        full_reply = st.write_stream(
+            stream_groq_reply(
+                client=groq_client,
                 system_prompt=system_prompt,
-                history=st.session_state.gemini_history,
-                model_name=DEFAULT_MODEL,
+                history=st.session_state.groq_history,
+                user_message=user_input,
+                model_name=DEFAULT_MODEL
             )
-            full_reply = st.write_stream(
-                stream_reply(st.session_state.chat_session, user_input)
-            )
+        )
 
-    # 4. Save to history
+    # 3. Save to history
     st.session_state.messages.append({"role": "assistant", "content": full_reply})
-    st.session_state.gemini_history.append({"role": "user", "parts": [user_input]})
-    st.session_state.gemini_history.append({"role": "model", "parts": [full_reply]})
+    st.session_state.groq_history.append({"role": "user", "parts": [user_input]})
+    st.session_state.groq_history.append({"role": "model", "parts": [full_reply]})
