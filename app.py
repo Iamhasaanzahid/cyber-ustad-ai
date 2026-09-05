@@ -5,6 +5,7 @@ Ek funny, roasting wala Cyber Security ustad jo Streamlit chat
 interface ke zariye Red Team + Blue Team A-to-Z sikhata hai.
 """
 
+import uuid
 import streamlit as st
 
 from core.gemini_client import (
@@ -14,6 +15,7 @@ from core.gemini_client import (
     stream_reply,
 )
 from core.persona import DIFFICULTY_LEVELS, WELCOME_MESSAGE, build_system_prompt
+from storage import load_chats, save_chats
 
 # ---------------------------------------------------------------------
 # Page config
@@ -23,6 +25,15 @@ st.set_page_config(
     page_icon="🕵️‍♂️",
     layout="centered",
 )
+
+# ---------------------------------------------------------------------
+# Load Persistent Guest Chats
+# ---------------------------------------------------------------------
+if "saved_chats" not in st.session_state:
+    st.session_state.saved_chats = load_chats()
+
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = str(uuid.uuid4())
 
 # ---------------------------------------------------------------------
 # Session state defaults
@@ -36,29 +47,48 @@ if "gemini_history" not in st.session_state:
 if "chat_session" not in st.session_state:
     st.session_state.chat_session = None
 
-if "configured" not in st.session_state:
-    st.session_state.configured = False
-
 
 # ---------------------------------------------------------------------
-# Sidebar - settings
+# Sidebar - settings & Guest Mode
 # ---------------------------------------------------------------------
 with st.sidebar:
     st.title("⚙️ CyberUstad Settings")
 
+    # Guest Mode Toggle & History Management
+    st.subheader("👤 Guest Session")
+    guest_mode = st.toggle("Guest Mode (Save Chats)", value=True)
+
+    if guest_mode and st.session_state.saved_chats:
+        chat_titles = {cid: data.get("title", "New Chat") for cid, data in st.session_state.saved_chats.items()}
+        selected_chat_id = st.selectbox(
+            "📁 Purani Chats Select Karo",
+            options=list(chat_titles.keys()),
+            format_func=lambda x: chat_titles[x],
+            index=list(chat_titles.keys()).index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_titles else 0
+        )
+        
+        # Agar user ne doosri chat select ki ho
+        if selected_chat_id != st.session_state.current_chat_id:
+            st.session_state.current_chat_id = selected_chat_id
+            st.session_state.messages = st.session_state.saved_chats[selected_chat_id].get("messages", [])
+            st.session_state.gemini_history = st.session_state.saved_chats[selected_chat_id].get("gemini_history", [])
+            st.session_state.chat_session = None
+            st.rerun()
+
+    st.divider()
+
+    # API Key input in sidebar (Optional override)
     api_key_input = st.text_input(
-        "🔑 Gemini API Key",
+        "🔑 Gemini API Key (Optional)",
         type="password",
-        placeholder="AIzaSy...",
-        help="Yahan apni API key paste kar do agar secrets.toml use nahi karna."
+        placeholder="Agar secrets use nahi karne...",
+        help="Yahan apni API key paste kar do agar session-based override chahiye."
     )
 
     st.divider()
 
     difficulty = st.selectbox("📚 Tumhara Level", DIFFICULTY_LEVELS, index=0)
-
     focus = st.radio("🎯 Focus", ["Red Team", "Blue Team", "Both"], index=2)
-
     roast_level = st.slider(
         "🔥 Roast Intensity",
         min_value=1,
@@ -70,17 +100,14 @@ with st.sidebar:
     st.divider()
 
     if st.button("🗑️ Naya Chat Shuru Karo", use_container_width=True):
+        st.session_state.current_chat_id = str(uuid.uuid4())
         st.session_state.messages = []
         st.session_state.gemini_history = []
         st.session_state.chat_session = None
-        st.session_state.configured = False
         st.session_state.settings_signature = None
         st.rerun()
 
-    st.divider()
-    st.caption(
-        "Made with 😂 + ☕. Educational purposes only."
-    )
+    st.caption("Made with 😂 + ☕. Educational purposes only.")
 
 
 # ---------------------------------------------------------------------
@@ -89,11 +116,17 @@ with st.sidebar:
 st.title("🕵️‍♂️ CyberUstad AI")
 st.caption("Red Team + Blue Team sikho... hasi hasi mein, roast khaate hue 😎🔥")
 
-# API key resolution
+# ---------------------------------------------------------------------
+# Robust API Key Resolution (Fixes Secrets issue)
+# ---------------------------------------------------------------------
 api_key = None
-if api_key_input and api_key_input.strip():
+
+# 1. Pehle check karo agar sidebar mein manual key di hai
+if api_key_input and api_key_input.strip() and api_key_input != "AIzaSy...":
     api_key = api_key_input.strip()
-else:
+
+# 2. Agar sidebar khali hai, toh Streamlit secrets se uthayo
+if not api_key:
     try:
         api_key = st.secrets["GEMINI_API_KEY"]
     except Exception:
@@ -102,7 +135,9 @@ else:
 if not api_key:
     st.error(
         "⚠️ **GEMINI_API_KEY set nahi hai!**\n\n"
-        "Sidebar mein apni API key paste karo ya Streamlit secrets mein add karo."
+        "Aapne Streamlit secrets mein key daali hai lekin wo load nahi ho rahi, "
+        "ya toh sidebar mein paste kar do ya `secrets.toml` mein format check karo:\n\n"
+        "```toml\nGEMINI_API_KEY = \"your_actual_key_here\"\n```"
     )
     st.stop()
 
@@ -113,7 +148,7 @@ if not api_key:
 system_prompt = build_system_prompt(difficulty, roast_level, focus)
 settings_signature = (api_key, difficulty, focus, roast_level)
 
-if st.session_state.get("settings_signature") != settings_signature:
+if st.session_state.get("settings_signature") != settings_signature or st.session_state.chat_session is None:
     try:
         configure_gemini(api_key)
         st.session_state.chat_session = create_chat_session(
@@ -122,8 +157,7 @@ if st.session_state.get("settings_signature") != settings_signature:
             model_name=DEFAULT_MODEL,
         )
         st.session_state.settings_signature = settings_signature
-        st.session_state.configured = True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  
         st.error(f"API key ya model configure karne mein masla: {exc}")
         st.stop()
 
@@ -132,9 +166,18 @@ if st.session_state.get("settings_signature") != settings_signature:
 # Show welcome message once
 # ---------------------------------------------------------------------
 if not st.session_state.messages:
+    welcome_content = WELCOME_MESSAGE
     with st.chat_message("assistant", avatar="🕵️‍♂️"):
-        st.markdown(WELCOME_MESSAGE)
-    st.session_state.messages.append({"role": "assistant", "content": WELCOME_MESSAGE})
+        st.markdown(welcome_content)
+    st.session_state.messages.append({"role": "assistant", "content": welcome_content})
+    
+    if guest_mode:
+        st.session_state.saved_chats[st.session_state.current_chat_id] = {
+            "title": "New Chat",
+            "messages": st.session_state.messages,
+            "gemini_history": st.session_state.gemini_history
+        }
+        save_chats(st.session_state.saved_chats)
 
 
 # ---------------------------------------------------------------------
@@ -157,9 +200,16 @@ if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
 
     if st.session_state.chat_session is None:
-        st.error("Connection thori si atak gayi thi — session reset kar diya hai, dobara sawal bhejo.")
-        st.session_state.settings_signature = None
-        st.rerun()
+        try:
+            configure_gemini(api_key)
+            st.session_state.chat_session = create_chat_session(
+                system_prompt=system_prompt,
+                history=st.session_state.gemini_history,
+                model_name=DEFAULT_MODEL,
+            )
+        except Exception:
+            st.error("Session expire ho gaya hai, dobara try karo.")
+            st.stop()
 
     with st.chat_message("assistant", avatar="🕵️‍♂️"):
         full_reply = st.write_stream(
@@ -170,3 +220,13 @@ if user_input:
 
     st.session_state.gemini_history.append({"role": "user", "parts": [user_input]})
     st.session_state.gemini_history.append({"role": "model", "parts": [full_reply]})
+
+    # Auto-save chat title using first user message if guest mode is on
+    if guest_mode:
+        chat_title = user_input[:25] + "..." if len(user_input) > 25 else user_input
+        st.session_state.saved_chats[st.session_state.current_chat_id] = {
+            "title": chat_title,
+            "messages": st.session_state.messages,
+            "gemini_history": st.session_state.gemini_history
+        }
+        save_chats(st.session_state.saved_chats)
